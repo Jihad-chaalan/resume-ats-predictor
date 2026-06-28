@@ -1,0 +1,28 @@
+﻿# Python & uv
+__pycache__/
+*.pyc
+.venv/
+venv/
+uv.lock
+
+# Data & Models (DVC handles these)
+data/processed/
+models/
+*.pkl
+*.joblib
+
+# MLflow
+mlruns/
+mlflow.db
+
+# DVC
+.dvc/
+.dvc/cache/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+.env
