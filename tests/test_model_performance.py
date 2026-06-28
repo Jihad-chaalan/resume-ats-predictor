@@ -1,4 +1,4 @@
-# tests/test_model_performance.py - UPDATED FOR V3.1
+# tests/test_model_performance.py - UPDATED FOR V2
 import pandas as pd
 import numpy as np
 import joblib
@@ -22,7 +22,7 @@ def test_model_performance():
     If performance drops below thresholds, the CI pipeline FAILS.
     """
     print("=" * 60)
-    print("🔬 MODEL PERFORMANCE VALIDATION (v3.1 - with Squared Penalty)")
+    print("🔬 MODEL PERFORMANCE VALIDATION (v2 - with Squared Penalty)")
     print("=" * 60)
     
     # 1. Load the test data
