@@ -1,4 +1,4 @@
-# app.py - Resume ATS Predictor Web App (v2 with Semantic Similarity)
+# app.py - Resume ATS Predictor Web App (v3)
 import gradio as gr
 import joblib
 import pandas as pd
@@ -10,7 +10,7 @@ from sklearn.metrics.pairwise import cosine_similarity
 # Load the trained model
 model = joblib.load('models/model_xgboost.pkl')
 
-# Load the sentence transformer (for computing similarity)
+# Load the sentence transformer
 embedder = SentenceTransformer('all-MiniLM-L6-v2')
 
 def clean_text(text):
@@ -22,44 +22,36 @@ def clean_text(text):
     text = re.sub(r'\s+', ' ', text).strip()
     return text
 
-def get_similarity_score(resume_text, job_description):
-    """Compute semantic similarity between resume and job description"""
-    # Clean the texts
+def get_similarity_and_penalty(resume_text, job_description):
+    """Compute semantic similarity and penalty"""
     cleaned_resume = clean_text(resume_text)
     cleaned_jd = clean_text(job_description)
     
-    # Generate embeddings
     resume_emb = embedder.encode([cleaned_resume])
     jd_emb = embedder.encode([cleaned_jd])
     
-    # Calculate cosine similarity
     sim = cosine_similarity(resume_emb, jd_emb)[0][0]
-    return sim
+    penalty = 1 - sim
+    
+    return sim, penalty
 
 def get_keyword_gap(resume_text, job_description):
-    """
-    Find keywords in JD that are missing from resume.
-    Handles short text gracefully.
-    """
-    # Extract all words (letters and numbers) from both texts
+    """Find keywords in JD that are missing from resume"""
     resume_words = set(re.findall(r'\b[a-zA-Z0-9]+\b', resume_text.lower()))
     jd_words = set(re.findall(r'\b[a-zA-Z0-9]+\b', job_description.lower()))
     
-    # Remove common stopwords
     stopwords = {
         'the', 'for', 'and', 'with', 'our', 'you', 'are', 'your', 'will',
         'can', 'all', 'any', 'but', 'not', 'one', 'two', 'use', 'may',
-        'well', 'get', 'way', 'new', 'set', 'has', 'its', 'our', 'from',
+        'well', 'get', 'way', 'new', 'set', 'has', 'its', 'from',
         'have', 'been', 'was', 'were', 'had', 'that', 'this', 'these',
         'those', 'then', 'than', 'more', 'most', 'some', 'such', 'into',
         'out', 'about', 'through', 'during', 'between', 'among'
     }
     
-    # Remove stopwords
     jd_words = jd_words - stopwords
     resume_words = resume_words - stopwords
     
-    # If JD has 0 words left, use all words (without filtering)
     if len(jd_words) < 2:
         jd_words = set(re.findall(r'\b[a-zA-Z0-9]+\b', job_description.lower()))
         resume_words = set(re.findall(r'\b[a-zA-Z0-9]+\b', resume_text.lower()))
@@ -67,62 +59,51 @@ def get_keyword_gap(resume_text, job_description):
         jd_words = jd_words - basic_stopwords
         resume_words = resume_words - basic_stopwords
     
-    # If still empty, show the original words
     if len(jd_words) < 1:
         return [], ['No keywords to analyze']
     
-    # Find missing and matched
     missing = jd_words - resume_words
     matched = jd_words & resume_words
     
-    # Sort alphabetically and limit to 10
     return sorted(list(missing))[:10], sorted(list(matched))[:10]
 
 def predict_resume(resume_text, job_description, years_experience, job_experience_required):
-    """
-    Main prediction function for the Gradio app
-    """
+    """Main prediction function"""
     if not resume_text or not job_description:
         return "Please provide both resume and job description.", "", "", "", ""
     
     try:
-        # 1. Clean the resume text
         cleaned_resume = clean_text(resume_text)
         
-        # 2. Compute semantic similarity (NEW!)
-        similarity_score = get_similarity_score(resume_text, job_description)
+        # Compute similarity and penalty
+        similarity_score, similarity_penalty = get_similarity_and_penalty(resume_text, job_description)
         
-        # 3. Create input DataFrame (matching training format)
+        # Create input DataFrame
         input_data = pd.DataFrame({
             'text': [cleaned_resume],
             'experience_years': [float(years_experience) if years_experience else 0],
             'job_experience_required': [float(job_experience_required) if job_experience_required else 0],
-            'similarity_score': [similarity_score]  # NEW!
+            'similarity_score': [similarity_score],
+            'similarity_penalty': [similarity_penalty]
         })
         
-        # 4. Make prediction
+        # Predict
         prediction = model.predict(input_data)[0]
         probability = model.predict_proba(input_data)[0]
         
-        # 5. Get keyword gap
+        # Get keyword gap
         missing_keywords, matched_keywords = get_keyword_gap(resume_text, job_description)
         
-        # 6. Prepare results
+        # Prepare results
         if prediction == 1:
             decision = "✅ SHORTLISTED"
-            score_color = "green"
             confidence = probability[1]
         else:
             decision = "❌ REJECTED"
-            score_color = "red"
             confidence = probability[0]
         
-        # Format missing keywords
         missing_str = ", ".join(missing_keywords) if missing_keywords else "None! Great match!"
         matched_str = ", ".join(matched_keywords[:10]) if matched_keywords else "No keywords found"
-        
-        # Show the similarity score for transparency
-        sim_display = f" (Similarity: {similarity_score:.2f})"
         
         return (
             decision,
@@ -135,10 +116,10 @@ def predict_resume(resume_text, job_description, years_experience, job_experienc
     except Exception as e:
         return f"❌ Error: {str(e)}", "", "", "", ""
 
-# Create the Gradio interface
+# Gradio Interface
 with gr.Blocks(title="Resume ATS Predictor", theme=gr.themes.Soft()) as demo:
     gr.Markdown("""
-    # 📄 Resume ATS Predictor
+    # 📄 Resume ATS Predictor (v2 - Semantic Similarity)
     ### Predict if your resume will be shortlisted by an Applicant Tracking System
     
     Enter your resume text, the job description, and your experience details below.
@@ -198,7 +179,6 @@ with gr.Blocks(title="Resume ATS Predictor", theme=gr.themes.Soft()) as demo:
                 interactive=False
             )
     
-    # Connect the button to the prediction function
     predict_btn.click(
         fn=predict_resume,
         inputs=[resume_input, jd_input, exp_input, jd_exp_input],
@@ -207,14 +187,15 @@ with gr.Blocks(title="Resume ATS Predictor", theme=gr.themes.Soft()) as demo:
     
     gr.Markdown("""
     ---
-     ### 💡 How it works (with Semantic Similarity)
+    ### 💡 How it works
     This model uses **XGBoost** trained on 6,000 resumes with:
     - TF-IDF text features (word importance)
-    - Numeric features: Years of Experience, Required Experience, **Semantic Similarity**
+    - Years of Experience
+    - **Semantic Similarity** (how relevant your resume is to the job)
+    - **Similarity Penalty** (penalizes mismatched roles)
     
-    The **semantic similarity** feature ensures candidates are only shortlisted if their resume content is relevant to the job description.
+    **v2 Improvement:** The similarity_penalty ensures that a Laravel Developer is correctly REJECTED for a Data Scientist role.
     """)
 
-# Launch the app
 if __name__ == "__main__":
     demo.launch(share=True)
