@@ -1,0 +1,49 @@
+name: Deploy to Hugging Face Spaces
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+
+      - name: Test Model Loading (Sanity Check)
+        run: |
+          python -c "import joblib; model = joblib.load('models/model_xgboost.pkl'); print('✅ Model loads perfectly!')"
+
+      - name: Clone Hugging Face Space
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          git clone https://user:$HF_TOKEN@huggingface.co/spaces/${{ secrets.HF_USERNAME }}/resume-ats-predictor
+
+      - name: Copy files to Space
+        run: |
+          cp app.py resume-ats-predictor/
+          cp requirements.txt resume-ats-predictor/
+          cp -r models resume-ats-predictor/
+
+      - name: Push to Hugging Face
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          cd resume-ats-predictor
+          git config user.email "ci-bot@github.com"
+          git config user.name "CI Bot"
+          git add .
+          git commit -m "🚀 Auto-deploy from GitHub Actions [skip ci]" || echo "No changes"
+          git push https://user:$HF_TOKEN@huggingface.co/spaces/${{ secrets.HF_USERNAME }}/resume-ats-predictor main
