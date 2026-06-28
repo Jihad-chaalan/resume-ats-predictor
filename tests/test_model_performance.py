@@ -4,6 +4,8 @@ import numpy as np
 import joblib
 import re
 from sklearn.metrics import accuracy_score, f1_score, roc_auc_score, classification_report
+from sentence_transformers import SentenceTransformer
+from sklearn.metrics.pairwise import cosine_similarity
 
 def clean_text(text):
     """Clean text the same way we did in training"""
@@ -20,18 +22,31 @@ def test_model_performance():
     If performance drops below thresholds, the CI pipeline FAILS.
     """
     print("=" * 60)
-    print("🔬 MODEL PERFORMANCE VALIDATION")
+    print("🔬 MODEL PERFORMANCE VALIDATION (v2 - with Similarity)")
     print("=" * 60)
     
     # 1. Load the test data
     df = pd.read_csv('data/processed/cleaned_resume_data.csv')
     print(f"✅ Loaded {len(df)} rows")
     
-    # 2. Prepare features (same as training)
-    numeric_features = ['experience_years', 'job_experience_required']
+    # 2. Prepare features (MUST MATCH TRAINING!)
+    numeric_features = ['experience_years', 'job_experience_required', 'similarity_score']
     
     # Clean the resume text
     df['resume_cleaned'] = df['resume_text'].apply(clean_text)
+    
+    # Compute semantic similarity (same as training!)
+    print("🔄 Computing semantic similarity for test data...")
+    embedder = SentenceTransformer('all-MiniLM-L6-v2')
+    resume_embeddings = embedder.encode(df['resume_cleaned'].tolist(), show_progress_bar=True, batch_size=32)
+    jd_embeddings = embedder.encode(df['jd_cleaned'].tolist(), show_progress_bar=True, batch_size=32)
+    
+    similarities = []
+    for i in range(len(df)):
+        sim = cosine_similarity([resume_embeddings[i]], [jd_embeddings[i]])[0][0]
+        similarities.append(sim)
+    df['similarity_score'] = similarities
+    print(f"✅ Added similarity_score to test data")
     
     X_text = df['resume_cleaned']
     X_num = df[numeric_features]
@@ -87,4 +102,3 @@ def test_model_performance():
     print("\n" + "=" * 60)
     print("✅ ALL THRESHOLDS PASSED! Model is ready for deployment.")
     print("=" * 60)
-    

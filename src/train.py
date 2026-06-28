@@ -1,4 +1,4 @@
-# src/train.py - XGBOOST VERSION (FIXED)
+# src/train.py - XGBOOST WITH SEMANTIC SIMILARITY (IMPROVEMENT 1)
 import pandas as pd
 import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
@@ -7,36 +7,73 @@ from sklearn.metrics import classification_report, accuracy_score, f1_score, roc
 from sklearn.preprocessing import StandardScaler
 from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
+from sklearn.metrics.pairwise import cosine_similarity
+from sentence_transformers import SentenceTransformer
 import xgboost as xgb
 import joblib
 from pathlib import Path
 
 print("=" * 50)
-print("RESUME ATS PREDICTOR - XGBOOST TRAINING")
+print("RESUME ATS PREDICTOR - XGBOOST TRAINING (v2 - with Similarity)")
 print("=" * 50)
 
 # 1. Load the cleaned data
 df = pd.read_csv('data/processed/cleaned_resume_data.csv')
 print(f"✅ Loaded {len(df)} rows")
 
-# 2. Define Features and Target
-numeric_features = ['experience_years', 'job_experience_required']
+# ============================================================
+# 2. ADD SEMANTIC SIMILARITY FEATURE (THE LARAVEL FIX!)
+# ============================================================
+print("\n🚀 Computing semantic similarity between resumes and job descriptions...")
+print("   (This uses a tiny, CPU-friendly AI model: all-MiniLM-L6-v2)")
+
+# Load the sentence transformer (lightweight, ~80MB, runs on CPU)
+embedder = SentenceTransformer('all-MiniLM-L6-v2')
+
+# Generate embeddings (numerical representations) for cleaned text
+resume_embeddings = embedder.encode(
+    df['resume_cleaned'].tolist(), 
+    show_progress_bar=True,
+    batch_size=32
+)
+jd_embeddings = embedder.encode(
+    df['jd_cleaned'].tolist(), 
+    show_progress_bar=True,
+    batch_size=32
+)
+
+# Calculate cosine similarity between each resume and its corresponding JD
+similarities = []
+for i in range(len(df)):
+    sim = cosine_similarity([resume_embeddings[i]], [jd_embeddings[i]])[0][0]
+    similarities.append(sim)
+
+df['similarity_score'] = similarities
+print(f"✅ Added 'similarity_score' feature!")
+print(f"   📊 Mean similarity: {np.mean(similarities):.3f}")
+print(f"   📊 Min similarity: {np.min(similarities):.3f}")
+print(f"   📊 Max similarity: {np.max(similarities):.3f}")
+
+# ============================================================
+# 3. Define Features and Target (NOW WITH SIMILARITY!)
+# ============================================================
+numeric_features = ['experience_years', 'job_experience_required', 'similarity_score']
 text_feature = 'resume_cleaned'
 
 X_text = df[text_feature]
 X_num = df[numeric_features]
 y = df['shortlisted']
 
-print(f"✅ Features: Text + Numeric ({numeric_features})")
+print(f"\n✅ Features: Text + Numeric ({numeric_features})")
 print(f"✅ Target distribution: {y.value_counts().to_dict()}")
 
-# 3. Split the data
+# 4. Split the data
 X_text_train, X_text_test, X_num_train, X_num_test, y_train, y_test = train_test_split(
     X_text, X_num, y, test_size=0.2, random_state=42, stratify=y
 )
 print(f"✅ Train size: {len(X_text_train)}, Test size: {len(X_text_test)}")
 
-# 4. Combine text and numeric features into one DataFrame for the pipeline
+# 5. Combine text and numeric features into one DataFrame for the pipeline
 def combine_features(text_series, num_df):
     df_combined = pd.DataFrame({'text': text_series})
     for col in num_df.columns:
@@ -46,7 +83,7 @@ def combine_features(text_series, num_df):
 X_train_combined = combine_features(X_text_train, X_num_train)
 X_test_combined = combine_features(X_text_test, X_num_test)
 
-# 5. Build the XGBoost Pipeline
+# 6. Build the XGBoost Pipeline
 text_pipeline = TfidfVectorizer(max_features=5000, stop_words='english')
 num_pipeline = StandardScaler()
 
@@ -72,12 +109,12 @@ model = Pipeline([
     ('classifier', classifier)
 ])
 
-# 6. Train the model (FROM SCRATCH!)
+# 7. Train the model (FROM SCRATCH!)
 print("\n🚀 Training XGBoost from scratch...")
 model.fit(X_train_combined, y_train)
 print("✅ Training complete!")
 
-# 7. Evaluate
+# 8. Evaluate
 y_pred = model.predict(X_test_combined)
 y_proba = model.predict_proba(X_test_combined)[:, 1]
 
@@ -91,7 +128,7 @@ print(f"AUC-ROC:   {roc_auc_score(y_test, y_proba):.4f}")
 print("\nClassification Report:")
 print(classification_report(y_test, y_pred, target_names=['Rejected', 'Shortlisted']))
 
-# 8. Feature Importance (FIXED)
+# 9. Feature Importance (FIXED)
 print("\n" + "=" * 50)
 print("TOP 10 MOST IMPORTANT FEATURES")
 print("=" * 50)
@@ -111,7 +148,7 @@ for idx in top_indices:
     else:
         print(f"  📝 '{feature_name}': {importance[idx]:.4f}")
 
-# 9. Save the model
+# 10. Save the model
 Path("models").mkdir(exist_ok=True)
 joblib.dump(model, 'models/model_xgboost.pkl')
 print("\n✅ Model saved to: models/model_xgboost.pkl")
