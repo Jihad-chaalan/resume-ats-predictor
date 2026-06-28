@@ -21,9 +21,10 @@ jobs:
         run: |
           pip install -r requirements.txt
 
-      - name: Test Model Loading (Sanity Check)
+      - name: Run Performance Gatekeeper
         run: |
-          python -c "import joblib; model = joblib.load('models/model_xgboost.pkl'); print('✅ Model loads perfectly!')"
+          pip install pytest
+          pytest tests/test_model_performance.py -v
 
       - name: Clone Hugging Face Space
         env:
