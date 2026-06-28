@@ -11,7 +11,7 @@
 ## 🚀 Live Demo
 
 Test the model live on Hugging Face Spaces:  
-👉 **[Click here to try it!](https://huggingface.co/spaces/Jihad-chaalan/resume-ats-predictor)**
+👉 **[Click here to try it!](https://huggingface.co/spaces/jiha-d/resume-ats-predictor)**
 
 ---
 
