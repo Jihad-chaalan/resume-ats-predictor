@@ -207,7 +207,7 @@ with gr.Blocks(title="Resume ATS Predictor", theme=gr.themes.Soft()) as demo:
     
     gr.Markdown("""
     ---
-    ### 💡 How it works
+     ### 💡 How it works (with Semantic Similarity)
     This model uses **XGBoost** trained on 6,000 resumes with:
     - TF-IDF text features (word importance)
     - Numeric features: Years of Experience, Required Experience, **Semantic Similarity**
